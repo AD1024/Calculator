@@ -24,7 +24,7 @@ Also, you can define some variables:
 
 Very Easy. 
 
-Borrowing a feature of Python, the value assignment can be done in one line:
+Borrowing a feature of Python, the value assignment above can be done in one line:
 
 ```
 ==> a, b = 10, 6
@@ -43,7 +43,7 @@ If you no longer need a variable, you can use keyword `rm` to delete the instanc
 NameError: a is not defined
 ```
 
-Also, for your convenience, you can assign value to a variable named `rm`. This action will not influence the effect of command `rm`, since the command and variable instance are separately stored. 
+Also, for your convenience, you can assign a value to a variable named `rm`. This action will not influence the effect of command `rm`, since the command and variable instance are separately stored. 
 
 ## Math Library
 
@@ -74,14 +74,14 @@ This is done for enhancing the readability of your calculation expressions as we
 
 ### Math Consts
 
-You can use the command `\math_const` to list all the constants that is built in the calculator:
+You can use the command `\math_const` to list all the constants that are built in the calculator:
 
 ```
 ==> e
 Œ >-> 2.718281828459045
 ```
 
-And for respecting people who found those values, you are not allowed to change the value of those constants though you will not receive a warning if you do so(cuz a warning can devastate one's mood while using a software). 
+And for respecting people who found those values, you are not allowed to change the values of those constants though you will not receive a warning if you do so(cuz a warning can devastate one's mood while using a software). 
 
 ```
 ==> e=10
