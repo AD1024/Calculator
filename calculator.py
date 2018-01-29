@@ -52,8 +52,10 @@ def is_real(s):
 
 
 def parse_value_assignment(exp):
+    if exp.count('=') > 1:
+        print('Syntax Error: duplicated \'=\'')
+        return None, None
     eq_pos = exp.find('=')
-
     l_expr, r_expr = exp[:eq_pos], exp[eq_pos + 1:]
     l_arg = []
     r_arg = []
