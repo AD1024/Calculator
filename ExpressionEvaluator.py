@@ -104,9 +104,18 @@ class ExprTreeConstructor:
                     self.add_node()
                 self.op.append(i)
             elif i in ('+', '-'):
-                while self.op and self.op[-1] != '(' and self.op[-1] not in ('|', '$', '&'):
-                    self.add_node()
-                self.op.append(i)
+                if i == '-' and (reader.get_prev_data(2) is None or (not reader.get_prev_data(2).isdigit())):
+                    while reader.has_next() and reader.get_cursor_data().isdigit():
+                        i += reader.next()
+                    if reader.get_cursor_data() == '.':
+                        i += reader.next()
+                        while reader.has_next() and reader.get_cursor_data().isdigit():
+                            i += reader.next()
+                    self.num.append(Const(float(i)))
+                else:
+                    while self.op and self.op[-1] != '(' and self.op[-1] not in ('|', '$', '&'):
+                        self.add_node()
+                    self.op.append(i)
             elif i == '%':
                 while self.op and self.op[-1] == '%':
                     self.add_node()
