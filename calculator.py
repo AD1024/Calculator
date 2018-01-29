@@ -120,7 +120,7 @@ def process_calculation(exp, dep=-1):
                     func_call = getattr(math, cur)
                     if arg_cur == ' ':
                         call_param = ''
-                        while reader.has_next() and reader.get_cursor_data() not in OPERATOR_LIST:
+                        while reader.has_next() and reader.get_cursor_data() not in OPERATOR_LIST + ('(', ')', ' '):
                             call_param += reader.next()
                         if not is_real(call_param):
                             if check_arg_name(call_param) is None \
