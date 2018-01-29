@@ -32,6 +32,19 @@ Borrowing a feature of Python, the value assignment can be done in one line:
 Œ >-> 60.0
 ```
 
+If you no longer need a variable, you can use keyword `rm` to delete the instance:
+
+```
+==> a = 10
+==> a
+Œ >-> 10.0
+==> rm a
+==> a
+NameError: a is not defined
+```
+
+Also, for your convenience, you can assign value to a variable named `rm`. This action will not influence the effect of command `rm`, since the command and variable instance are separately stored. 
+
 ## Math Library
 
 ### Math Functions
