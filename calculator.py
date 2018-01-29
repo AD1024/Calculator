@@ -39,7 +39,7 @@ def check_parenthesis_matching(exp):
 def check_arg_name(name):
     if name in dynamic_env.keys():
         return True
-    if name in MATH_FUNC:
+    if name in MATH_FUNC + MATH_CONST:
         return False
     return print('NameError: {} is not defined'.format(name))
 
@@ -126,7 +126,7 @@ def process_calculation(exp, dep=-1):
                             if check_arg_name(call_param) is None \
                                     and call_param[:call_param.find('(')] not in MATH_FUNC:
                                 return ErronoToken('name')
-                            call_param = process_calculation(call_param)
+                            call_param = eval_calculation(process_calculation(call_param))
                             # call_param = dynamic_env.get(call_param)
                         else:
                             call_param = float(call_param)
