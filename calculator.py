@@ -53,7 +53,10 @@ class LambdaFunc:
             else:
                 lambda_scope[__id].update({k: v})
         process_body = process_calculation(self.func_body, lambda_call=__id)
-        return eval_calculation(process_body)
+        ret = eval_calculation(process_body)
+        for k in self.param_list:
+            lambda_scope[__id].pop(k)
+        return ret
 
     def __repr__(self):
         return '<defined-function @ {}: {} -> {}>'.format(self._id,
@@ -117,9 +120,15 @@ def parse_lambda(lmda):
             parsed_param += cur
     parsed_param = parsed_param.split(',')
     reader = Reader.new_instance(body)
-    while reader.has_next():
+    parsed_body = reader.next()
+    stk = 1
+    while reader.has_next() and stk:
         cur = reader.next()
-        if cur not in ESCAPE_SPACE_SYMBOL and cur != '}':
+        if cur not in ESCAPE_SPACE_SYMBOL:
+            if cur == '{':
+                stk += 1
+            elif cur == '}':
+                stk -= 1
             parsed_body += cur
     return parsed_param, parsed_body
 
@@ -272,8 +281,6 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                         stk_cnt = 1
                         while reader.has_next() and stk_cnt:
                             ptr = reader.next()
-                            if ptr in ESCAPE_SPACE_SYMBOL:
-                                continue
                             if ptr == '(':
                                 stk_cnt += 1
                             elif ptr == ')':
@@ -291,7 +298,7 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                                         ptr += t_cur
                                     param_list.append(ptr)
                                 elif t_cur == ',':
-                                    ptr = t_cur
+                                    ptr = ''
                                     while t_reader.has_next() and t_reader.get_cursor_data() != ',':
                                         t_cur = t_reader.next()
                                         ptr += t_cur
