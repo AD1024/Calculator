@@ -135,16 +135,21 @@ def parse_lambda(lmda):
     parsed_param = parsed_param.split(',')
     reader = Reader.new_instance(body)
     parsed_body = reader.next()
-    stk = 2
-    while reader.has_next() and stk:
-        cur = reader.next()
-        if cur not in ESCAPE_SPACE_SYMBOL:
-            if cur == '{':
-                stk += 1
-            elif cur == '}':
-                stk -= 1
-            parsed_body += cur
-    # print(parsed_body)
+    stk = 2 if parsed_body == '{' else None
+    if stk is None:
+        while reader.has_next() and reader.get_cursor_data() != '}':
+            cur = reader.next()
+            if cur not in ESCAPE_SPACE_SYMBOL:
+                parsed_body += cur
+    else:
+        while reader.has_next() and stk:
+            cur = reader.next()
+            if cur not in ESCAPE_SPACE_SYMBOL:
+                if cur == '{':
+                    stk += 1
+                elif cur == '}':
+                    stk -= 1
+                parsed_body += cur
     return parsed_param, parsed_body
 
 
@@ -301,14 +306,14 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                             elif ptr == ')':
                                 stk_cnt -= 1
                             param_list += ptr
-                        if '{' in param_list:
+                        if '{' in param_list or '(' in param_list:
                             t_reader = Reader.new_instance(param_list[:-1])
                             param_list = []
                             while t_reader.has_next():
                                 t_cur = t_reader.next()
-                                if t_cur == '{':
+                                if t_cur in ('{', '('):
                                     ptr = t_cur
-                                    while t_reader.has_next() and t_cur != '}':
+                                    while t_reader.has_next() and t_cur not in ('}', ')'):
                                         t_cur = t_reader.next()
                                         ptr += t_cur
                                     param_list.append(ptr)
@@ -318,6 +323,24 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                                         t_cur = t_reader.next()
                                         ptr += t_cur
                                     param_list.append(ptr)
+                                elif t_cur.isalpha():
+                                    ptr = t_cur
+                                    while t_reader.has_next() and t_reader.get_cursor_data().isalpha():
+                                        ptr += t_reader.next()
+                                    if t_reader.has_next():
+                                        t_cur = t_reader.next()
+                                        if t_cur in ('{', '('):
+                                            ptr += t_cur
+                                            while t_reader.has_next() and t_cur not in ('}', ')'):
+                                                t_cur = t_reader.next()
+                                                ptr += t_cur
+                                            param_list.append(ptr)
+                                        else:
+                                            t_reader.prev()
+                                            param_list.append(ptr)
+                                    else:
+                                        param_list.append(ptr)
+
                         else:
                             param_list = param_list[:-1].split(',')
                         for i in range(0, len(param_list)):
