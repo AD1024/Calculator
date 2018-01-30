@@ -10,6 +10,7 @@ OPERATOR_LIST = ('+', '-', '*', '/', '%', '^')
 ESCAPE_SPACE_SYMBOL = ('\n', '\r', '\t', ' ', '')
 MATH_FUNC = list(filter(lambda x: not x.startswith('_') and 'function' in type(getattr(math, x)).__name__, dir(math)))
 MATH_CONST = list(filter(lambda x: not x.startswith('_') and type(getattr(math, x)).__name__ == 'float', dir(math)))
+KWLIST = tuple(__import__('keyword').kwlist)
 
 
 class ErronoToken(Enum):
@@ -68,6 +69,9 @@ def parse_value_assignment(exp):
             if cur in MATH_FUNC:
                 print('NameError: {} is a math function'.format(cur))
                 return None, None
+            if cur in KWLIST:
+                print('NameError: {} is a keyword'.format(cur))
+                return None, None
             l_arg.append(cur)
         elif cur in OPERATOR_LIST:
             print('calculation found in left expr, stop data assignment')
@@ -109,6 +113,9 @@ def process_calculation(exp, dep=-1):
                 cur += reader.next()
             if cur in MATH_CONST:
                 res += str(getattr(math, cur))
+                continue
+            if cur in ('True', 'False'):
+                res += cur
                 continue
             chk_res = check_arg_name(cur)
             if chk_res is None:
@@ -160,7 +167,11 @@ def process_calculation(exp, dep=-1):
                                 res += str(
                                     eval('math.{}({})'.format(cur, str(param_list).replace('[', '').replace(']', ''))))
                         except TypeError:
-                            res += str('math.{}'.format(cur))
+                            if cur in ('gcd',):
+                                param_list = list(map(lambda x: int(x), param_list))
+                                res += str(
+                                    eval('math.{}({})'.format(cur,
+                                                              reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
             else:
                 res = res + str(dynamic_env.get(cur))
         else:

@@ -93,6 +93,10 @@ class ExprTreeConstructor:
                 while reader.has_next() and reader.get_cursor_data().isalpha():
                     i += reader.next()
                 self.num.append(Const(float(i)))
+            elif i in ('T', 'F'):
+                while reader.has_next() and reader.get_cursor_data().isalpha():
+                    i += reader.next()
+                self.num.append(Const(True if i == 'True' else False))
             elif i == '(':
                 self.op.append(i)
             elif i == ')':
