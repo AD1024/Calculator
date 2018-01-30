@@ -298,31 +298,30 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                             _append(func_call(call_param))
                     else:
                         param_list = ''
-                        stk_cnt = 1
-                        while reader.has_next() and stk_cnt:
+                        stk_cnt = 0
+                        while reader.has_next() and stk_cnt >= 0:
                             ptr = reader.next()
                             if ptr == '(':
                                 stk_cnt += 1
                             elif ptr == ')':
                                 stk_cnt -= 1
+                            if ptr == ')' and stk_cnt < 0:
+                                ptr = ''
                             param_list += ptr
                         if '{' in param_list or '(' in param_list:
-                            t_reader = Reader.new_instance(param_list[:-1])
+                            t_reader = Reader.new_instance(param_list)
                             param_list = []
                             while t_reader.has_next():
                                 t_cur = t_reader.next()
                                 if t_cur in ('{', '('):
                                     ptr = t_cur
-                                    while t_reader.has_next() and t_cur not in ('}', ')'):
+                                    while t_reader.has_next() and t_reader.get_cursor_data() not in ('}', ')'):
                                         t_cur = t_reader.next()
                                         ptr += t_cur
+                                    ptr += t_reader.next()
                                     param_list.append(ptr)
-                                elif t_cur == ',':
-                                    ptr = ''
-                                    while t_reader.has_next() and t_reader.get_cursor_data() != ',':
-                                        t_cur = t_reader.next()
-                                        ptr += t_cur
-                                    param_list.append(ptr)
+                                elif t_cur == ',' or t_cur in ESCAPE_SPACE_SYMBOL:
+                                    continue
                                 elif t_cur.isalpha():
                                     ptr = t_cur
                                     while t_reader.has_next() and t_reader.get_cursor_data().isalpha():
@@ -330,9 +329,18 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                                     if t_reader.has_next():
                                         t_cur = t_reader.next()
                                         if t_cur in ('{', '('):
+                                            flag = 1
                                             ptr += t_cur
-                                            while t_reader.has_next() and t_cur not in ('}', ')'):
+                                            stk = 1
+                                            while t_reader.has_next() and (stk or flag):
                                                 t_cur = t_reader.next()
+                                                flag = 0
+                                                if t_cur == '(':
+                                                    stk += 1
+                                                elif t_cur == ')':
+                                                    stk -= 1
+                                                if t_cur == ')' and stk < 0:
+                                                    t_cur = ''
                                                 ptr += t_cur
                                             param_list.append(ptr)
                                         else:
@@ -340,9 +348,14 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                                             param_list.append(ptr)
                                     else:
                                         param_list.append(ptr)
-
+                                elif t_cur.isdigit():
+                                    while reader.has_next() and reader.get_cursor_data().isdigit() \
+                                            or reader.get_cursor_data() == '.':
+                                        t_cur += reader.next()
+                                    param_list.append(t_cur)
                         else:
-                            param_list = param_list[:-1].split(',')
+                            param_list = param_list.split(',')
+                        # print(param_list)
                         for i in range(0, len(param_list)):
                             param_list[i] = process_calculation(param_list[i], dep=1, lambda_call=lambda_call)
                             if isinstance(param_list[i], ErronoToken):
