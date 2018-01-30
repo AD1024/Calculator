@@ -89,3 +89,27 @@ And for respecting people who found those values, you are not allowed to change 
 Œ >-> 2.718281828459045
 ```
 
+## Functions
+
+The syntax of defining a function is:
+
+```
+{e1, e2, e3->...}
+```
+
+For instance, you can define a function to find out the maximum value among three values:
+
+```
+==> someFun = {x,y,z->max(max(x,y),z)}
+==> someFun(1,2,3)
+Œ >-> 3.0 
+```
+
+Also, function can be taken as a parameter:
+
+```
+==> someFun = {x,y,z->x(y,z)}
+==> someFun({a,b->a^b}, 2, 10)
+Œ >-> 1024.0
+```
+

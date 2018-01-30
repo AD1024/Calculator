@@ -349,9 +349,9 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                                     else:
                                         param_list.append(ptr)
                                 elif t_cur.isdigit():
-                                    while reader.has_next() and reader.get_cursor_data().isdigit() \
-                                            or reader.get_cursor_data() == '.':
-                                        t_cur += reader.next()
+                                    while t_reader.has_next() and (t_reader.get_cursor_data().isdigit()
+                                                                 or t_reader.get_cursor_data() == '.'):
+                                        t_cur += t_reader.next()
                                     param_list.append(t_cur)
                         else:
                             param_list = param_list.split(',')
