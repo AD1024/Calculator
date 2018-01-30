@@ -1,6 +1,7 @@
 from ExpressionEvaluator import *
 import Reader
 from enum import Enum
+from math import *
 import math
 from _functools import reduce
 
@@ -8,8 +9,9 @@ dynamic_env = {}
 
 OPERATOR_LIST = ('+', '-', '*', '/', '%', '^')
 ESCAPE_SPACE_SYMBOL = ('\n', '\r', '\t', ' ', '')
-MATH_FUNC = list(filter(lambda x: not x.startswith('_') and 'function' in type(getattr(math, x)).__name__, dir(math)))
-MATH_CONST = list(filter(lambda x: not x.startswith('_') and type(getattr(math, x)).__name__ == 'float', dir(math)))
+MATH_FUNC = tuple(filter(lambda x: not x.startswith('_') and 'function' in type(getattr(math, x)).__name__, dir(math)))
+MATH_CONST = tuple(filter(lambda x: not x.startswith('_') and type(getattr(math, x)).__name__ == 'float', dir(math)))
+BUILT_IN = ('sum', 'min', 'max', 'any', 'all')
 KWLIST = tuple(__import__('keyword').kwlist)
 
 
@@ -40,7 +42,7 @@ def check_parenthesis_matching(exp):
 def check_arg_name(name):
     if name in dynamic_env.keys():
         return True
-    if name in MATH_FUNC + MATH_CONST:
+    if name in MATH_FUNC + MATH_CONST + BUILT_IN:
         return False
     return print('NameError: {} is not defined'.format(name))
 
@@ -68,6 +70,9 @@ def parse_value_assignment(exp):
                 cur += reader.next()
             if cur in MATH_FUNC:
                 print('NameError: {} is a math function'.format(cur))
+                return None, None
+            if cur in BUILT_IN:
+                print('NameError: {} is a built-in function'.format(cur))
                 return None, None
             if cur in KWLIST:
                 print('NameError: {} is a keyword'.format(cur))
@@ -112,7 +117,7 @@ def process_calculation(exp, dep=-1):
             while reader.has_next() and reader.get_cursor_data() not in OPERATOR_LIST + ('(', ')', ' '):
                 cur += reader.next()
             if cur in MATH_CONST:
-                res += str(getattr(math, cur))
+                res += str(eval(cur))
                 continue
             if cur in ('True', 'False'):
                 res += cur
@@ -123,11 +128,17 @@ def process_calculation(exp, dep=-1):
             elif not chk_res:
                 arg_cur = reader.next()
                 if arg_cur not in ('(', ' '):
-                    print('<math-function {}>'.format(cur))
-                    return ErronoToken('name')
+                    if cur in MATH_FUNC:
+                        print('<math-function {}>'.format(cur))
+                        return ErronoToken('name')
+                    elif cur in BUILT_IN:
+                        print('<built-in function {}>'.format(cur))
+                        return ErronoToken('name')
                 else:
-                    func_call = getattr(math, cur)
+                    func_call = eval(cur)
                     if arg_cur == ' ':
+                        if cur in BUILT_IN:
+                            break
                         call_param = ''
                         while reader.has_next() and reader.get_cursor_data() not in OPERATOR_LIST + ('(', ')', ' '):
                             call_param += reader.next()
@@ -136,7 +147,6 @@ def process_calculation(exp, dep=-1):
                                     and call_param[:call_param.find('(')] not in MATH_FUNC:
                                 return ErronoToken('name')
                             call_param = eval_calculation(process_calculation(call_param))
-                            # call_param = dynamic_env.get(call_param)
                         else:
                             call_param = float(call_param)
                         res = res + str(func_call(call_param))
@@ -161,17 +171,21 @@ def process_calculation(exp, dep=-1):
                         try:
                             if len(param_list) > 1:
                                 res += str(
-                                    eval('math.{}({})'.format(cur,
-                                                              reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
+                                    eval('{}({})'.format(cur,
+                                                         reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
                             else:
                                 res += str(
-                                    eval('math.{}({})'.format(cur, str(param_list).replace('[', '').replace(']', ''))))
+                                    eval('{}({})'.format(cur, str(param_list).replace('[', '').replace(']', ''))))
                         except TypeError:
                             if cur in ('gcd',):
                                 param_list = list(map(lambda x: int(x), param_list))
                                 res += str(
-                                    eval('math.{}({})'.format(cur,
-                                                              reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
+                                    eval('{}({})'.format(cur,
+                                                         reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
+                            elif cur in BUILT_IN:
+                                res += str(
+                                    eval('{}([{}])'.format(cur,
+                                                           reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
             else:
                 res = res + str(dynamic_env.get(cur))
         else:
