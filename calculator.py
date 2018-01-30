@@ -35,13 +35,13 @@ class DataType(Enum):
 class LambdaFunc:
     __slots__ = ['func_body', 'param_list', '_id', 'name', 'param', 'func_context']
 
-    def __init__(self, param, body, _id, name='', actual_param=None):
+    def __init__(self, param, body, _id, name='', actual_param=None, context=None):
         self.func_body = body
         self.param_list = param
         self._id = _id
         self.name = name
         self.param = actual_param
-        self.func_context = None
+        self.func_context = context
 
     def run(self, param):
         if len(param) != len(self.param_list):
@@ -54,13 +54,13 @@ class LambdaFunc:
             else:
                 lambda_scope[__id].update({k: v})
         if self.func_context is not None:
-            __id = self.func_context.get_id()
+            __id = int(self.func_context.get_id(), base=16)
             for k, v in zip(self.func_context.param_list, self.func_context.param):
                 if __id not in lambda_scope.keys():
                     lambda_scope[__id] = {k: v}
                 else:
                     lambda_scope[__id].update({k: v})
-        process_body = process_calculation(self.func_body, lambda_call=__id)
+        process_body = process_calculation(self.func_body, lambda_call=int(self._id, base=16), lambda_func=self)
         ret = eval_calculation(process_body)
         self.param = param
         if type(ret).__name__ == 'LambdaFunc':
@@ -71,7 +71,7 @@ class LambdaFunc:
         return self._id
 
     def __copy__(self):
-        return LambdaFunc(self.param_list, self.func_body, self._id, self.name, self.param)
+        return LambdaFunc(self.param_list, self.func_body, self._id, self.name, self.param, self.func_context)
 
     def __repr__(self):
         return '<defined-function @ {}: {} -> {}>'.format(self._id,
@@ -101,16 +101,19 @@ def check_parenthesis_matching(exp):
     return True if not s else False
 
 
-def check_arg_name(name, lambda_call=-1):
+def check_arg_name(name, lambda_call=-1, func=None):
     if name in dynamic_env.keys():
         if static_env[name] == DataType.Fun:
-            return False
-        return True
+            return False, -1
+        return True, None
     if name in MATH_FUNC + MATH_CONST + BUILT_IN:
-        return False
-    if lambda_call != -1:
-        return None if lambda_scope[lambda_call].get(name, None) is None else True
-    return print('NameError: {} is not defined'.format(name))
+        return False, -1
+    if lambda_call != -1 and func is not None:
+        if lambda_scope[lambda_call].get(name, None) is None:
+            return check_arg_name(name, lambda_call=int(func.func_context.get_id(), base=16), func=func.func_context)
+        else:
+            return True, lambda_call
+    return print('NameError: {} is not defined'.format(name)), -1
 
 
 def is_real(s):
@@ -238,22 +241,28 @@ def parse_value_assignment(exp):
         return l_arg, r_arg
 
 
-def process_calculation(exp, dep=-1, lambda_call=-1):
+def process_calculation(exp, dep=-1, lambda_call=-1, lambda_func=None):
     reader = Reader.new_instance(exp)
     res = []
     _append = res.append
+    call_id = lambda_call
     while reader.has_next():
         cur = reader.next()
         if cur.isalpha():
             while reader.has_next() and reader.get_cursor_data() not in OPERATOR_LIST + ('(', ')', ' '):
                 cur += reader.next()
             if cur in MATH_CONST:
-                res += str(eval(cur))
+                res.append((eval(cur)))
                 continue
             if cur in ('True', 'False'):
-                res += cur
+                res.append(cur)
                 continue
-            chk_res = check_arg_name(cur, lambda_call)
+            chk_res = check_arg_name(cur, lambda_call, lambda_func)
+            actual_lambda_id = chk_res[1]
+            chk_res = chk_res[0]
+            if actual_lambda_id != -1:
+                _append(lambda_scope[actual_lambda_id].get(cur))
+                continue
             if chk_res is None:
                 if lambda_call == -1:
                     return ErronoToken('name')
@@ -274,7 +283,7 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                         # print('<built-in function {}>'.format(cur))
                         return [eval(cur)]
                     elif cur in dynamic_env.keys() and static_env[cur] == DataType.Fun:
-                        print('{}'.format(repr(dynamic_env[cur])))
+                        # print('{}'.format(repr(dynamic_env[cur])))
                         return [dynamic_env.get(cur)]
                 else:
                     if arg_cur == ' ':
@@ -287,7 +296,8 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                             if check_arg_name(call_param) is None \
                                     and call_param[:call_param.find('(')] not in MATH_FUNC:
                                 return ErronoToken('name')
-                            call_param = eval_calculation(process_calculation(call_param, 1, lambda_call=lambda_call))
+                            call_param = eval_calculation(process_calculation(call_param, 1, lambda_call=lambda_call
+                                                                              , lambda_func=lambda_func))
                         else:
                             call_param = float(call_param)
                         if cur in dynamic_env and static_env[cur] == DataType.Fun:
@@ -350,14 +360,15 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                                         param_list.append(ptr)
                                 elif t_cur.isdigit():
                                     while t_reader.has_next() and (t_reader.get_cursor_data().isdigit()
-                                                                 or t_reader.get_cursor_data() == '.'):
+                                                                   or t_reader.get_cursor_data() == '.'):
                                         t_cur += t_reader.next()
                                     param_list.append(t_cur)
                         else:
                             param_list = param_list.split(',')
                         # print(param_list)
                         for i in range(0, len(param_list)):
-                            param_list[i] = process_calculation(param_list[i], dep=1, lambda_call=lambda_call)
+                            param_list[i] = process_calculation(param_list[i], dep=1, lambda_call=lambda_call
+                                                                , lambda_func=lambda_func)
                             if isinstance(param_list[i], ErronoToken):
                                 return ErronoToken('name')
                         for i in range(0, len(param_list)):
@@ -390,7 +401,7 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                                 _append(eval('{}([{}])'.format(cur,
                                                                reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
             else:
-                _append(dynamic_env.get(cur) if lambda_call == -1 else lambda_scope[lambda_call].get(cur))
+                _append(dynamic_env.get(cur) if call_id == -1 else lambda_scope[call_id].get(cur))
         elif cur == '{':
             while reader.has_next() and reader.get_cursor_data() != '}':
                 ptr = reader.next()
@@ -425,6 +436,10 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                     reader.prev()
             else:
                 res.append(local_bindings.pop())
+        elif cur.isdigit():
+            while reader.has_next() and (reader.get_cursor_data().isdigit() or reader.get_cursor_data() == '.'):
+                cur += reader.next()
+            _append(cur)
         else:
             if dep != -1:
                 if cur == '(':
