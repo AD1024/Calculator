@@ -33,7 +33,7 @@ class DataType(Enum):
 
 
 class LambdaFunc:
-    __slots__ = ['func_body', 'param_list', '_id', 'name', 'param']
+    __slots__ = ['func_body', 'param_list', '_id', 'name', 'param', 'func_context']
 
     def __init__(self, param, body, _id, name='', actual_param=None):
         self.func_body = body
@@ -41,6 +41,7 @@ class LambdaFunc:
         self._id = _id
         self.name = name
         self.param = actual_param
+        self.func_context = None
 
     def run(self, param):
         if len(param) != len(self.param_list):
@@ -52,11 +53,31 @@ class LambdaFunc:
                 lambda_scope[__id] = {k: v}
             else:
                 lambda_scope[__id].update({k: v})
+        if self.func_context is not None:
+            __id = self.func_context.get_id()
+            for k, v in zip(self.func_context.param_list, self.func_context.param):
+                if __id not in lambda_scope.keys():
+                    lambda_scope[__id] = {k: v}
+                else:
+                    lambda_scope[__id].update({k: v})
         process_body = process_calculation(self.func_body, lambda_call=__id)
         ret = eval_calculation(process_body)
+        self.param = param
         for k in self.param_list:
             lambda_scope[__id].pop(k)
+        if self.func_context is not None:
+            __id = self.func_context.get_id()
+            for k in self.func_context.param:
+                lambda_scope[__id].pop(k)
+        if type(ret).__name__ == 'LambdaFunc':
+            ret.func_context = self.__copy__()
         return ret
+
+    def get_id(self):
+        return self._id
+
+    def __copy__(self):
+        return LambdaFunc(self.param_list, self.func_body, self._id, self.name, self.param)
 
     def __repr__(self):
         return '<defined-function @ {}: {} -> {}>'.format(self._id,
@@ -113,7 +134,6 @@ def parse_lambda(lmda):
     body = lmda[p + 2:]
     reader = Reader.new_instance(param)
     parsed_param = ''
-    parsed_body = ''
     while reader.has_next():
         cur = reader.next()
         if cur not in ESCAPE_SPACE_SYMBOL and cur not in '{,}'.split(','):
@@ -315,8 +335,13 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                             lambda_call = dynamic_env[cur]
                             _append(lambda_call.run(tuple(param_list)))
                             continue
+
+                        def find_nearest_arg(func):
+                            pass
+
                         if lambda_call != -1 and type(lambda_scope[lambda_call].get(cur)).__name__ == 'LambdaFunc':
                             lambda_call = lambda_scope[lambda_call].get(cur)
+                            # print(lambda_call)
                             _append(lambda_call.run(tuple(param_list)))
                             continue
                         try:
