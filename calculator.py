@@ -8,6 +8,7 @@ import time
 dynamic_env = {}  # Variables
 static_env = {}
 lambda_scope = {}  # Local variable for lambdas
+local_bindings = []
 
 OPERATOR_LIST = ('+', '-', '*', '/', '%', '^', '|', '$', '&')
 ESCAPE_SPACE_SYMBOL = ('\n', '\r', '\t', ' ', '')
@@ -27,6 +28,7 @@ class DataType(Enum):
     Int = 'int'
     Float = 'float'
     Fun = 'func'
+    AFun = 'lambda'
     Bool = 'bool'
 
 
@@ -64,7 +66,7 @@ def assign_id():
 
 
 def new_lambda(param, body, name=''):
-    return LambdaFunc(body, param, assign_id(), name)
+    return LambdaFunc(param, body, assign_id(), name)
 
 
 def check_parenthesis_matching(exp):
@@ -122,6 +124,13 @@ def parse_lambda(lmda):
     return parsed_param, parsed_body
 
 
+def push_anonymous_fun(exp):
+    param_list, func_body = parse_lambda(exp)
+    func = new_lambda(param_list, func_body, '{}'.format(hex(int(time.time()))))
+    local_bindings.append(func)
+    static_env.update({func.name: DataType.AFun})
+
+
 def parse_value_assignment(exp):
     if exp.count('=') > 1:
         print('Syntax Error: duplicated \'=\'')
@@ -133,6 +142,8 @@ def parse_value_assignment(exp):
     reader = Reader.new_instance(l_expr)
     while reader.has_next():
         cur = reader.next()
+        if cur in ESCAPE_SPACE_SYMBOL:
+            continue
         if cur.isalpha():
             while reader.has_next() and reader.get_cursor_data().isalpha():
                 cur += reader.next()
@@ -156,25 +167,41 @@ def parse_value_assignment(exp):
     reader = Reader.new_instance(r_expr)
     while reader.has_next():
         cur = reader.next()
+        if cur in ESCAPE_SPACE_SYMBOL:
+            continue
         if cur.isalpha() or cur.isdigit():
-            while reader.has_next() and reader.get_cursor_data() != ',':
+            while reader.has_next() and reader.get_cursor_data() not in (',', '(', '{'):
                 cur += reader.next()
-            r_arg.append(cur)
-        elif cur == ',':
-            inner_exp = ''
-            while reader.has_next() and reader.get_cursor_data() != ',':
-                inner_exp += reader.next()
-            reader.next()
-            if inner_exp:
-                r_arg.append(inner_exp)
+            if reader.has_next() and reader.get_cursor_data() == '(':
+                stk = 1
+                cur += reader.next()
+                while reader.has_next() and stk:
+                    ptr = reader.next()
+                    if ptr in ESCAPE_SPACE_SYMBOL:
+                        continue
+                    if ptr == '(':
+                        stk += 1
+                    elif ptr == ')':
+                        stk -= 1
+                    cur += ptr
+                r_arg.append(cur)
             else:
-                r_arg.append(None)
+                r_arg.append(cur)
+        # elif cur == ',':
+        #     inner_exp = ''
+        #     while reader.has_next() and reader.get_cursor_data() != ',':
+        #         inner_exp += reader.next()
+        #     reader.next()
+        #     if inner_exp:
+        #         r_arg.append(inner_exp)
+        #     else:
+        #         r_arg.append(None)
         elif cur == '{':
             while reader.has_next() and reader.get_cursor_data() != '}':
                 cur += reader.next()
             cur += reader.next()
             parse_data = parse_lambda(cur)
-            r_arg.append(new_lambda(parse_data[1], parse_data[0]))
+            r_arg.append(new_lambda(parse_data[0], parse_data[1]))
     if len(l_arg) != len(r_arg):
         print('Argument length dose not match, stop data assignment')
         return None, None
@@ -207,7 +234,8 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                     else:
                         res += str(lambda_scope[lambda_call].get(cur, None))
                         continue
-            elif not chk_res:
+            elif not chk_res or (
+                    lambda_call != -1 and type(lambda_scope[lambda_call].get(cur)).__name__ == 'LambdaFunc'):
                 arg_cur = reader.next()
                 if arg_cur not in ('(', ' '):
                     if cur in MATH_FUNC:
@@ -235,7 +263,7 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                             call_param = float(call_param)
                         if cur in dynamic_env and static_env[cur] == DataType.Fun:
                             lambda_call = dynamic_env[cur]
-                            _append(lambda_call.run((call_param, )))
+                            _append(lambda_call.run((call_param,)))
                         else:
                             func_call = eval(cur)
                             _append(func_call(call_param))
@@ -244,13 +272,32 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                         stk_cnt = 1
                         while reader.has_next() and stk_cnt:
                             ptr = reader.next()
+                            if ptr in ESCAPE_SPACE_SYMBOL:
+                                continue
                             if ptr == '(':
                                 stk_cnt += 1
                             elif ptr == ')':
                                 stk_cnt -= 1
                             param_list += ptr
-                        param_list = param_list[:-1].split(',')
-                        # reader.next()
+                        if '{' in param_list:
+                            t_reader = Reader.new_instance(param_list[:-1])
+                            param_list = []
+                            while t_reader.has_next():
+                                t_cur = t_reader.next()
+                                if t_cur == '{':
+                                    ptr = t_cur
+                                    while t_reader.has_next() and t_cur != '}':
+                                        t_cur = t_reader.next()
+                                        ptr += t_cur
+                                    param_list.append(ptr)
+                                elif t_cur == ',':
+                                    ptr = t_cur
+                                    while t_reader.has_next() and t_reader.get_cursor_data() != ',':
+                                        t_cur = t_reader.next()
+                                        ptr += t_cur
+                                    param_list.append(ptr)
+                        else:
+                            param_list = param_list[:-1].split(',')
                         for i in range(0, len(param_list)):
                             param_list[i] = process_calculation(param_list[i], dep=1, lambda_call=lambda_call)
                             if isinstance(param_list[i], ErronoToken):
@@ -259,6 +306,10 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                             param_list[i] = eval_calculation(param_list[i])
                         if cur in dynamic_env and static_env[cur] == DataType.Fun:
                             lambda_call = dynamic_env[cur]
+                            _append(lambda_call.run(tuple(param_list)))
+                            continue
+                        if lambda_call != -1 and type(lambda_scope[lambda_call].get(cur)).__name__ == 'LambdaFunc':
+                            lambda_call = lambda_scope[lambda_call].get(cur)
                             _append(lambda_call.run(tuple(param_list)))
                             continue
                         try:
@@ -277,6 +328,40 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                                                                reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
             else:
                 _append(dynamic_env.get(cur) if lambda_call == -1 else lambda_scope[lambda_call].get(cur))
+        elif cur == '{':
+            while reader.has_next() and reader.get_cursor_data() != '}':
+                ptr = reader.next()
+                if ptr not in ESCAPE_SPACE_SYMBOL:
+                    cur += ptr
+            cur += reader.next()
+            push_anonymous_fun(cur)
+            stk_cnt = 1
+            if reader.has_next():
+                nxt = reader.next()
+                if nxt == '(':
+                    param_list = ''
+                    while reader.has_next() and stk_cnt:
+                        ptr = reader.next()
+                        if ptr in ESCAPE_SPACE_SYMBOL:
+                            continue
+                        if ptr == '(':
+                            stk_cnt += 1
+                        elif ptr == ')':
+                            stk_cnt -= 1
+                        param_list += ptr
+                    param_list = param_list[:-1].split(',')
+                    for i in range(0, len(param_list)):
+                        param_list[i] = process_calculation(param_list[i], dep=1, lambda_call=lambda_call)
+                        if isinstance(param_list[i], ErronoToken):
+                            return ErronoToken('name')
+                    for i in range(0, len(param_list)):
+                        param_list[i] = eval_calculation(param_list[i])
+                    lambda_call = local_bindings.pop()
+                    _append(lambda_call.run(tuple(param_list)))
+                else:
+                    reader.prev()
+            else:
+                res.append(local_bindings.pop())
         else:
             if dep != -1:
                 if cur == '(':
