@@ -1,6 +1,5 @@
 import Reader
 
-
 class Operator:
     __slots__ = ['lchild', 'op', 'rchild']
 
@@ -54,7 +53,7 @@ class Evaluator:
 
 class ExprTreeConstructor:
     def __init__(self, exp):
-        self.expr = list(exp)
+        self.expr = exp
         self.num = []
         self.op = []
 
@@ -77,10 +76,18 @@ class ExprTreeConstructor:
         self.op.pop()
 
     def build(self):
+        from calculator import LambdaFunc
         reader = Reader.new_instance(self.expr)
         while reader.has_next():
             i = reader.next()
-            if i.isdigit():
+            if isinstance(i, float) or isinstance(i, int) or isinstance(i, bool):
+                self.num.append(Const(i))
+            elif type(i).__name__ == 'LambdaFunc':
+                if i.param is not None:
+                    self.num.append(i.run(i.param))
+                else:
+                    self.num.append(Const(i))
+            elif i.isdigit():
                 const_value = i
                 while reader.has_next() and reader.get_cursor_data().isdigit():
                     const_value += reader.next()

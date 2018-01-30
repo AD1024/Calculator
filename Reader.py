@@ -5,8 +5,8 @@ class Reader:
         self.data = ''
         self.cursor = -1
 
-    def __init__(self, string):
-        self.data = string
+    def __init__(self, data):
+        self.data = data if isinstance(data, list) else list(data)
         self.cursor = 0
 
     def next(self):

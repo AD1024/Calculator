@@ -1,13 +1,15 @@
-from ExpressionEvaluator import *
-import Reader
-from enum import Enum
 from math import *
 import math
+from ExpressionEvaluator import *
+from enum import Enum
 from _functools import reduce
+import time
 
-dynamic_env = {}
+dynamic_env = {}  # Variables
+static_env = {}
+lambda_scope = {}  # Local variable for lambdas
 
-OPERATOR_LIST = ('+', '-', '*', '/', '%', '^')
+OPERATOR_LIST = ('+', '-', '*', '/', '%', '^', '|', '$', '&')
 ESCAPE_SPACE_SYMBOL = ('\n', '\r', '\t', ' ', '')
 MATH_FUNC = tuple(filter(lambda x: not x.startswith('_') and 'function' in type(getattr(math, x)).__name__, dir(math)))
 MATH_CONST = tuple(filter(lambda x: not x.startswith('_') and type(getattr(math, x)).__name__ == 'float', dir(math)))
@@ -21,8 +23,48 @@ class ErronoToken(Enum):
     value_error = 'value'
 
 
-def print_result(result):
-    print('Œ >-> {}'.format(result))
+class DataType(Enum):
+    Int = 'int'
+    Float = 'float'
+    Fun = 'func'
+    Bool = 'bool'
+
+
+class LambdaFunc:
+    __slots__ = ['func_body', 'param_list', '_id', 'name', 'param']
+
+    def __init__(self, param, body, _id, name='', actual_param=None):
+        self.func_body = body
+        self.param_list = param
+        self._id = _id
+        self.name = name
+        self.param = actual_param
+
+    def run(self, param):
+        if len(param) != len(self.param_list):
+            print('TypeError: missing argument(s); expected {} <> actual {}'.format(len(self.param_list), len(param)))
+            return None
+        __id = int(self._id, base=16)
+        for k, v in zip(self.param_list, param):
+            if __id not in lambda_scope.keys():
+                lambda_scope[__id] = {k: v}
+            else:
+                lambda_scope[__id].update({k: v})
+        process_body = process_calculation(self.func_body, lambda_call=__id)
+        return eval_calculation(process_body)
+
+    def __repr__(self):
+        return '<defined-function @ {}: {} -> {}>'.format(self._id,
+                                                          reduce(lambda x, y: '{}, {}'.format(x, y), self.param_list),
+                                                          self.func_body)
+
+
+def assign_id():
+    return hex(int(time.time()))
+
+
+def new_lambda(param, body, name=''):
+    return LambdaFunc(body, param, assign_id(), name)
 
 
 def check_parenthesis_matching(exp):
@@ -39,11 +81,15 @@ def check_parenthesis_matching(exp):
     return True if not s else False
 
 
-def check_arg_name(name):
+def check_arg_name(name, lambda_call=-1):
     if name in dynamic_env.keys():
+        if static_env[name] == DataType.Fun:
+            return False
         return True
     if name in MATH_FUNC + MATH_CONST + BUILT_IN:
         return False
+    if lambda_call != -1:
+        return None if lambda_scope[lambda_call].get(name, None) is None else True
     return print('NameError: {} is not defined'.format(name))
 
 
@@ -52,6 +98,28 @@ def is_real(s):
         return len(list(filter(lambda x: x.isdigit(), s.split('.'))))
     else:
         return s.isdigit()
+
+
+def parse_lambda(lmda):
+    p = lmda.find('->')
+    if p == -1:
+        return ErronoToken('syntax')
+    param = lmda[:p]
+    body = lmda[p + 2:]
+    reader = Reader.new_instance(param)
+    parsed_param = ''
+    parsed_body = ''
+    while reader.has_next():
+        cur = reader.next()
+        if cur not in ESCAPE_SPACE_SYMBOL and cur not in '{,}'.split(','):
+            parsed_param += cur
+    parsed_param = parsed_param.split(',')
+    reader = Reader.new_instance(body)
+    while reader.has_next():
+        cur = reader.next()
+        if cur not in ESCAPE_SPACE_SYMBOL and cur != '}':
+            parsed_body += cur
+    return parsed_param, parsed_body
 
 
 def parse_value_assignment(exp):
@@ -101,6 +169,12 @@ def parse_value_assignment(exp):
                 r_arg.append(inner_exp)
             else:
                 r_arg.append(None)
+        elif cur == '{':
+            while reader.has_next() and reader.get_cursor_data() != '}':
+                cur += reader.next()
+            cur += reader.next()
+            parse_data = parse_lambda(cur)
+            r_arg.append(new_lambda(parse_data[1], parse_data[0]))
     if len(l_arg) != len(r_arg):
         print('Argument length dose not match, stop data assignment')
         return None, None
@@ -108,9 +182,10 @@ def parse_value_assignment(exp):
         return l_arg, r_arg
 
 
-def process_calculation(exp, dep=-1):
+def process_calculation(exp, dep=-1, lambda_call=-1):
     reader = Reader.new_instance(exp)
-    res = ''
+    res = []
+    _append = res.append
     while reader.has_next():
         cur = reader.next()
         if cur.isalpha():
@@ -122,9 +197,16 @@ def process_calculation(exp, dep=-1):
             if cur in ('True', 'False'):
                 res += cur
                 continue
-            chk_res = check_arg_name(cur)
+            chk_res = check_arg_name(cur, lambda_call)
             if chk_res is None:
-                return ErronoToken('name')
+                if lambda_call == -1:
+                    return ErronoToken('name')
+                else:
+                    if lambda_scope[lambda_call].get(cur, None) is None:
+                        return ErronoToken('name')
+                    else:
+                        res += str(lambda_scope[lambda_call].get(cur, None))
+                        continue
             elif not chk_res:
                 arg_cur = reader.next()
                 if arg_cur not in ('(', ' '):
@@ -134,8 +216,10 @@ def process_calculation(exp, dep=-1):
                     elif cur in BUILT_IN:
                         print('<built-in function {}>'.format(cur))
                         return ErronoToken('name')
+                    elif cur in dynamic_env.keys() and static_env[cur] == DataType.Fun:
+                        print('{}'.format(repr(dynamic_env[cur])))
+                        return ErronoToken('name')
                 else:
-                    func_call = eval(cur)
                     if arg_cur == ' ':
                         if cur in BUILT_IN:
                             break
@@ -146,10 +230,15 @@ def process_calculation(exp, dep=-1):
                             if check_arg_name(call_param) is None \
                                     and call_param[:call_param.find('(')] not in MATH_FUNC:
                                 return ErronoToken('name')
-                            call_param = eval_calculation(process_calculation(call_param))
+                            call_param = eval_calculation(process_calculation(call_param, 1))
                         else:
                             call_param = float(call_param)
-                        res = res + str(func_call(call_param))
+                        if cur in dynamic_env and static_env[cur] == DataType.Fun:
+                            lambda_call = dynamic_env[cur]
+                            _append(lambda_call.run((call_param, )))
+                        else:
+                            func_call = eval(cur)
+                            _append(func_call(call_param))
                     else:
                         param_list = ''
                         stk_cnt = 1
@@ -168,26 +257,26 @@ def process_calculation(exp, dep=-1):
                                 return ErronoToken('name')
                         for i in range(0, len(param_list)):
                             param_list[i] = eval_calculation(param_list[i])
+                        if cur in dynamic_env and static_env[cur] == DataType.Fun:
+                            lambda_call = dynamic_env[cur]
+                            _append(lambda_call.run(tuple(param_list)))
+                            continue
                         try:
                             if len(param_list) > 1:
-                                res += str(
-                                    eval('{}({})'.format(cur,
-                                                         reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
+                                _append(eval('{}({})'.format(cur,
+                                                             reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
                             else:
-                                res += str(
-                                    eval('{}({})'.format(cur, str(param_list).replace('[', '').replace(']', ''))))
+                                _append(eval('{}({})'.format(cur, str(param_list).replace('[', '').replace(']', ''))))
                         except TypeError:
                             if cur in ('gcd',):
                                 param_list = list(map(lambda x: int(x), param_list))
-                                res += str(
-                                    eval('{}({})'.format(cur,
-                                                         reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
+                                _append(eval('{}({})'.format(cur,
+                                                             reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
                             elif cur in BUILT_IN:
-                                res += str(
-                                    eval('{}([{}])'.format(cur,
-                                                           reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
+                                _append(eval('{}([{}])'.format(cur,
+                                                               reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
             else:
-                res = res + str(dynamic_env.get(cur))
+                _append(dynamic_env.get(cur) if lambda_call == -1 else lambda_scope[lambda_call].get(cur))
         else:
             if dep != -1:
                 if cur == '(':
@@ -196,12 +285,16 @@ def process_calculation(exp, dep=-1):
                     dep -= 1
                 if dep == 0:
                     return res
-            res += cur
+            _append(cur)
     return res
 
 
 def eval_calculation(exp):
     return Evaluator(ExprTreeConstructor(exp).build()).eval()
+
+
+def print_result(result):
+    print('Œ >-> {}'.format(result))
 
 
 def main():
@@ -238,6 +331,9 @@ def main():
             else:
                 status = 0
                 for i in range(0, len(arg_r)):
+                    if isinstance(arg_r[i], LambdaFunc):
+                        arg_r[i] = [arg_r[i]]
+                        continue
                     arg_r[i] = process_calculation(arg_r[i])
                     if isinstance(arg_r[i], ErronoToken):
                         status = 1
@@ -246,6 +342,14 @@ def main():
                     continue
                 for i in range(0, len(arg_r)):
                     dynamic_env.update({arg_l[i]: eval_calculation(arg_r[i])})
+                    if type(dynamic_env[arg_l[i]]).__name__ == 'LambdaFunc':
+                        static_env.update({arg_l[i]: DataType.Fun})
+                    else:
+                        static_env.update({arg_l[i]: {
+                            int: lambda: DataType.Int,
+                            bool: lambda: DataType.Bool,
+                            float: lambda: DataType.Float,
+                        }.get(type(dynamic_env[arg_l[i]]))()})
         else:
             if check_parenthesis_matching(exp):
                 exp = process_calculation(exp)
@@ -254,4 +358,5 @@ def main():
                 print_result(eval_calculation(exp))
 
 
-main()
+if __name__ == '__main__':
+    main()
