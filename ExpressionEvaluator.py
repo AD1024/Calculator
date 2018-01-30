@@ -87,6 +87,8 @@ class ExprTreeConstructor:
                     self.num.append(i.run(i.param))
                 else:
                     self.num.append(Const(i))
+            elif 'builtin' in type(i).__name__:
+                self.num.append(Const(i))
             elif i.isdigit():
                 const_value = i
                 while reader.has_next() and reader.get_cursor_data().isdigit():

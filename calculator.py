@@ -268,14 +268,14 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                 arg_cur = reader.next()
                 if arg_cur not in ('(', ' '):
                     if cur in MATH_FUNC:
-                        print('<math-function {}>'.format(cur))
-                        return ErronoToken('name')
+                        # print('<math-function {}>'.format(cur))
+                        return [eval(cur)]
                     elif cur in BUILT_IN:
-                        print('<built-in function {}>'.format(cur))
-                        return ErronoToken('name')
+                        # print('<built-in function {}>'.format(cur))
+                        return [eval(cur)]
                     elif cur in dynamic_env.keys() and static_env[cur] == DataType.Fun:
                         print('{}'.format(repr(dynamic_env[cur])))
-                        return ErronoToken('name')
+                        return [dynamic_env.get(cur)]
                 else:
                     if arg_cur == ' ':
                         if cur in BUILT_IN:
