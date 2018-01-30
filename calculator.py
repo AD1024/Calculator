@@ -63,12 +63,6 @@ class LambdaFunc:
         process_body = process_calculation(self.func_body, lambda_call=__id)
         ret = eval_calculation(process_body)
         self.param = param
-        for k in self.param_list:
-            lambda_scope[__id].pop(k)
-        if self.func_context is not None:
-            __id = self.func_context.get_id()
-            for k in self.func_context.param:
-                lambda_scope[__id].pop(k)
         if type(ret).__name__ == 'LambdaFunc':
             ret.func_context = self.__copy__()
         return ret
@@ -141,7 +135,7 @@ def parse_lambda(lmda):
     parsed_param = parsed_param.split(',')
     reader = Reader.new_instance(body)
     parsed_body = reader.next()
-    stk = 1
+    stk = 2
     while reader.has_next() and stk:
         cur = reader.next()
         if cur not in ESCAPE_SPACE_SYMBOL:
@@ -150,6 +144,7 @@ def parse_lambda(lmda):
             elif cur == '}':
                 stk -= 1
             parsed_body += cur
+    # print(parsed_body)
     return parsed_param, parsed_body
 
 
