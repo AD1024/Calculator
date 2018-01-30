@@ -230,7 +230,7 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                             if check_arg_name(call_param) is None \
                                     and call_param[:call_param.find('(')] not in MATH_FUNC:
                                 return ErronoToken('name')
-                            call_param = eval_calculation(process_calculation(call_param, 1))
+                            call_param = eval_calculation(process_calculation(call_param, 1, lambda_call=lambda_call))
                         else:
                             call_param = float(call_param)
                         if cur in dynamic_env and static_env[cur] == DataType.Fun:
@@ -252,7 +252,7 @@ def process_calculation(exp, dep=-1, lambda_call=-1):
                         param_list = param_list[:-1].split(',')
                         # reader.next()
                         for i in range(0, len(param_list)):
-                            param_list[i] = process_calculation(param_list[i], dep=1)
+                            param_list[i] = process_calculation(param_list[i], dep=1, lambda_call=lambda_call)
                             if isinstance(param_list[i], ErronoToken):
                                 return ErronoToken('name')
                         for i in range(0, len(param_list)):
