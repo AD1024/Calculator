@@ -260,7 +260,7 @@ def process_calculation(exp, dep=-1, lambda_call=-1, lambda_func=None):
             chk_res = check_arg_name(cur, lambda_call, lambda_func)
             actual_lambda_id = chk_res[1]
             chk_res = chk_res[0]
-            if actual_lambda_id != -1:
+            if actual_lambda_id != -1 and actual_lambda_id != lambda_call:
                 _append(lambda_scope[actual_lambda_id].get(cur))
                 continue
             if chk_res is None:

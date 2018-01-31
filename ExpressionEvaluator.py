@@ -84,7 +84,7 @@ class ExprTreeConstructor:
                 self.num.append(Const(i))
             elif type(i).__name__ == 'LambdaFunc':
                 if i.param is not None:
-                    self.num.append(i.run(i.param))
+                    self.num.append(Const(i.run(i.param)))
                 else:
                     self.num.append(Const(i))
             elif 'builtin' in type(i).__name__:
