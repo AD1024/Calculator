@@ -48,6 +48,7 @@ class LambdaFunc:
             print('TypeError: missing argument(s); expected {} <> actual {}'.format(len(self.param_list), len(param)))
             return None
         __id = int(self._id, base=16)
+        self.param = param
         for k, v in zip(self.param_list, param):
             if __id not in lambda_scope.keys():
                 lambda_scope[__id] = {k: v}
@@ -62,9 +63,9 @@ class LambdaFunc:
                     lambda_scope[__id].update({k: v})
         process_body = process_calculation(self.func_body, lambda_call=int(self._id, base=16), lambda_func=self)
         ret = eval_calculation(process_body)
-        self.param = param
         if type(ret).__name__ == 'LambdaFunc':
             ret.func_context = self.__copy__()
+        self.param = None
         return ret
 
     def get_id(self):
@@ -105,14 +106,16 @@ def check_arg_name(name, lambda_call=-1, func=None):
     if name in dynamic_env.keys():
         if static_env[name] == DataType.Fun:
             return False, -1
-        return True, None
+        return True, -1
     if name in MATH_FUNC + MATH_CONST + BUILT_IN:
         return False, -1
     if lambda_call != -1 and func is not None:
         if lambda_scope[lambda_call].get(name, None) is None:
-            return check_arg_name(name, lambda_call=int(func.func_context.get_id(), base=16), func=func.func_context)
+            if func.func_context is not None:
+                return check_arg_name(name, lambda_call=int(func.func_context.get_id(), base=16), func=func.func_context)
+            return None, -1
         else:
-            return True, lambda_call
+            return (False if type(lambda_scope[lambda_call].get(name)).__name__ == 'LambdaFunc' else True), lambda_call
     return print('NameError: {} is not defined'.format(name)), -1
 
 
@@ -260,7 +263,7 @@ def process_calculation(exp, dep=-1, lambda_call=-1, lambda_func=None):
             chk_res = check_arg_name(cur, lambda_call, lambda_func)
             actual_lambda_id = chk_res[1]
             chk_res = chk_res[0]
-            if actual_lambda_id != -1 and actual_lambda_id != lambda_call:
+            if actual_lambda_id != -1 and actual_lambda_id != lambda_call and chk_res:
                 _append(lambda_scope[actual_lambda_id].get(cur))
                 continue
             if chk_res is None:
@@ -270,7 +273,7 @@ def process_calculation(exp, dep=-1, lambda_call=-1, lambda_func=None):
                     if lambda_scope[lambda_call].get(cur, None) is None:
                         return ErronoToken('name')
                     else:
-                        res += str(lambda_scope[lambda_call].get(cur, None))
+                        res.append(lambda_scope[lambda_call].get(cur, None))
                         continue
             elif not chk_res or (
                     lambda_call != -1 and type(lambda_scope[lambda_call].get(cur)).__name__ == 'LambdaFunc'):
@@ -374,32 +377,38 @@ def process_calculation(exp, dep=-1, lambda_call=-1, lambda_func=None):
                         for i in range(0, len(param_list)):
                             param_list[i] = eval_calculation(param_list[i])
                         if cur in dynamic_env and static_env[cur] == DataType.Fun:
-                            lambda_call = dynamic_env[cur]
-                            _append(lambda_call.run(tuple(param_list)))
+                            func_call = dynamic_env[cur]
+                            _append(func_call.run(tuple(param_list)))
                             continue
-
-                        def find_nearest_arg(func):
-                            pass
 
                         if lambda_call != -1 and type(lambda_scope[lambda_call].get(cur)).__name__ == 'LambdaFunc':
-                            lambda_call = lambda_scope[lambda_call].get(cur)
-                            # print(lambda_call)
-                            _append(lambda_call.run(tuple(param_list)))
+                            func_call = lambda_scope[lambda_call].get(cur)
+                            _append(func_call.run(tuple(param_list)))
                             continue
-                        try:
-                            if len(param_list) > 1:
-                                _append(eval('{}({})'.format(cur,
-                                                             reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
-                            else:
-                                _append(eval('{}({})'.format(cur, str(param_list).replace('[', '').replace(']', ''))))
-                        except TypeError:
-                            if cur in ('gcd',):
-                                param_list = list(map(lambda x: int(x), param_list))
-                                _append(eval('{}({})'.format(cur,
-                                                             reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
-                            elif cur in BUILT_IN:
-                                _append(eval('{}([{}])'.format(cur,
-                                                               reduce(lambda x, y: '{},{}'.format(x, y), param_list))))
+                        elif actual_lambda_id != -1 and type(
+                                lambda_scope[actual_lambda_id].get(cur)).__name__ == 'LambdaFunc':
+                            func_call = lambda_scope[actual_lambda_id].get(cur)
+                            _append(func_call.run(tuple(param_list)))
+                            continue
+                        else:
+                            try:
+                                if len(param_list) > 1:
+                                    _append(eval('{}({})'.format(cur,
+                                                                 reduce(lambda x, y: '{},{}'.format(x, y),
+                                                                        param_list))))
+                                else:
+                                    _append(
+                                        eval('{}({})'.format(cur, str(param_list).replace('[', '').replace(']', ''))))
+                            except TypeError:
+                                if cur in ('gcd',):
+                                    param_list = list(map(lambda x: int(x), param_list))
+                                    _append(eval('{}({})'.format(cur,
+                                                                 reduce(lambda x, y: '{},{}'.format(x, y),
+                                                                        param_list))))
+                                elif cur in BUILT_IN:
+                                    _append(eval('{}([{}])'.format(cur,
+                                                                   reduce(lambda x, y: '{},{}'.format(x, y),
+                                                                          param_list))))
             else:
                 _append(dynamic_env.get(cur) if call_id == -1 else lambda_scope[call_id].get(cur))
         elif cur == '{':
@@ -504,15 +513,17 @@ def main():
                 if status:
                     continue
                 for i in range(0, len(arg_r)):
-                    dynamic_env.update({arg_l[i]: eval_calculation(arg_r[i])})
-                    if type(dynamic_env[arg_l[i]]).__name__ == 'LambdaFunc':
+                    ret = eval_calculation(arg_r[i])
+                    if type(ret).__name__ == 'LambdaFunc':
                         static_env.update({arg_l[i]: DataType.Fun})
+                        ret.name = arg_l[i]
                     else:
                         static_env.update({arg_l[i]: {
                             int: lambda: DataType.Int,
                             bool: lambda: DataType.Bool,
                             float: lambda: DataType.Float,
-                        }.get(type(dynamic_env[arg_l[i]]))()})
+                        }.get(type(ret))()})
+                    dynamic_env.update({arg_l[i]: ret})
         else:
             if check_parenthesis_matching(exp):
                 exp = process_calculation(exp)
